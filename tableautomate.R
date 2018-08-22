@@ -1,3 +1,17 @@
+query<-synTableQuery("SELECT * FROM syn11801978")
+sm<-as.data.frame(query)
+sm<-as_tibble(sm)
+
+#check primary key
+sm %>% 
+  count(Sample_ID) %>% 
+  filter(n > 1)
+
+redundnant_DI <- sm %>% 
+  count(Data_ID) %>% 
+  filter(n > 1)
+
+
 #if there are no changes don't push a new version
 #remove edit permissions from table
 #write to file and save new table version at the same time
@@ -38,41 +52,6 @@ get_files <- function(SYN_LIST){
   files
 }
 
-
-###GENERAL REGEX
-#var mapObj = {Institution:"Brain_Bank", Brain_ID:"HBCC_Brain_ID",Sample_RNA_ID:"Sample_ID"}
-#once all metadata files are in list of tibbles, select variable for table 
-stand_naming <-function(data){
-  data <- data %>%
-    purrr::map(~ dplyr::select(., 
-                               HBCC_Brain_ID = "Brain ID")) %>% 
-    purrr::map(~ dplyr::select(.,
-                               scz = "SCZ_Pair"))
-  data
-}
-
-
-purrr::map(~ dplyr::rename_all(.,funs(gsub(" ","_",.))))
-  
-
-
-#column naming convention is new_name = current_name
-#perhaps do not rename until everything is bound/joined. 
-
-
-
-
-#purrr::map(~ dplyr::rename_all(.,funs(sub('Brain_ID', 'HBCC_Brain_ID',.)))) 
-cols_current = quos(Brain_ID, SCZ_Pair)
-cols_new = quos(HBCC_Brain_ID, scz)
-cols_list = list(cols_current,cols_new)
-df1<-all$filecontents[[1]]
-
-df <- df1 %>% rename_all(., funs(gsub(" ","_",.)))
-df <- df %>% dplyr::select(HBCC_Brain_ID = "Brain_ID", scz = "SCZ_Pair", everything()) 
-
-
-
 ###assertr
 brainbank <- c("HBCC","MSSM","PENN","PITT")
 dx <- c("AFF", "BP", "Control","MDD","SCZ")
@@ -90,34 +69,99 @@ masterTable <- get_files(SYN_LIST)
 masterTable$version #how to store previous versions? 
 masterCols <- c("Individual_ID","Brain_Bank","HBCC_Brain_ID", "NDA_GUID","SCZ_Pair","BP_Pair","Gender","Ethnicity","Age_of_Death","Dx","Funding","ASSAY","ASSAY_Target","Tissue","Cell_Type","Dissection_ID","Sample_ID","Data_ID","Exclude","Exclude_Reason", "QC_Metric","QC_Value","Biomaterials_Available")
 
-selectCols <-c("Individual ID","Institution","Brain ID","SCZ Pair", "BP Pair","Ethnicity","Age of Death","Dx","Institution Dissection ID", "Institution Source ID","Sample DNA ID","Brain Region", "Cell Type","Exclude?","Exclude Reason","Sample RNA ID")
-data<-masterTable$filecontents
+selectCols <-c("Individual ID","Institution","Brain ID","SCZ Pair", "BP Pair","Ethnicity","Age of Death","Dx","Institution Dissection ID", "Institution Source ID","Sample DNA ID","Brain Region", "Cell Type","Exclude?","Exclude Reason","Sample RNA ID","Assay Sample ID")
 
-#need to specify join columns, need to join sequentially
-
-data<-masterTable[1:7,]
-data<-data$filecontents
-
-
-subset_cols <- purrr::map(data, ~ dplyr::select(.,one_of(selectCols))) %>% 
-  purrr::map(~ dplyr::rename_all(.,funs(gsub(" ","_",.))))
-
-seq_join(subset_cols, datatype = c("Clinical","Brain_Region"))
-
-
-
-#joins must be sequential based on type 
-
-seq_join <- function(data, datatype = c(), join_columns = c()) {
-  
-  files_of_interest<-data$filecontents[grep(c(datatype),data$filename)]
-  
-  new <- files_of_interest %>%
-    reduce(full_join, by = join_columns)
-  
-  as.tibble(new)
+colSubset <- function(data, selectCols = c()){
+  data$filecontents <- data$filecontents %>% 
+    purrr::map(., ~ dplyr::select(.,one_of(selectCols))) %>% 
+    purrr::map(., ~ dplyr::rename_all(.,funs(gsub(" ","_",.)))) %>% 
+    purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Sample_RNA_ID", "Sample_ID",.)))) %>% 
+    purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Sample_DNA_ID", "Sample_ID",.)))) %>% 
+    purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Assay_Sample_ID", "Sample_ID",.))))
+  data
 }
 
+data <- working
+####with consistent naming can rely on datatype in position 3, therefore code doesnt need to be modified as types of data are increased**************
+collapseRows <- function(data, datatype = c(), seq_1 = c()) {
+  next_iteration <- purrr::map(datatype, ~ data$filecontents[grep(.,data$filename)]) %>%
+    setNames(datatype) %>% 
+    purrr::map(., ~ dplyr::bind_rows(.))
+  first <- next_iteration[seq_1] %>% 
+    reduce(full_join)
+  second <- next_iteration[-which(names(next_iteration) %in% seq_1)] %>% 
+    reduce(full_join)
+  finalJoin <- full_join(first,second, by = "Institution_Dissection_ID", "Sample_ID")
+}
+
+
+temp <- first %>% 
+  full_join(next_iteration$Isolation) %>% 
+  full_join(next_iteration$Genotyping) %>% 
+  full_join(next_iteration$WGS) %>% 
+  full_join(next_iteration$MicroArray) %>% 
+  full_join(next_iteration$RNAseq)
+
+
+###concatenate exclude reason horizontally across isolation and assays; If I proceed with this need to do a check that exclude values of 1 populate every reason 
+#select only Sample_ID,
+#try to take out institution dissection ID
+concatenateCols <- c("Sample_ID", "Exclude_Reason")
+concatenate_excludes <- next_iteration[-which(names(next_iteration) %in% seq_1)] %>% 
+  purrr::map(., ~ dplyr::select(.,one_of(concatenateCols))) %>% 
+  reduce(full_join, by= c("Sample_ID")) %>% 
+  unite(Exclude_Reason_Summary, -one_of(c("Sample_ID")), sep = "_") #can use case_when in this situation?? 
+
+
+datatype = c("Clinical", "Brain", "Isolation", "Genotyping", "WGS", "MicroArray", "RNAseq","ATACseq")
+seq_1 = c("Clinical","Brain")
+seq_2 = c("Isolation")
+working <- colSubset(masterTable, selectCols)
+finalJoin <- collapseRows(working, datatype, seq_1)
+
+
+#check for lost IDs: seems like the left join is functioning properly, though it drops sample IDs that are not mapped to a isolation ID. Could enforce a check to make sure 
+#those IDs are associated with an exclusion value and if so, still push the table. For IDs that do not have an exclusion value, an error will be thrown. 
+checkEx <- next_iteration[-which(names(next_iteration) %in% seq_1)] %>% 
+  reduce(bind_rows)
+View(checkEx[(checkEx$Sample_ID %in% missingDID),])
+missingDID <- test$Sample_ID[is.na(test$Individual_ID) & is.na(test$Institution_Dissection_ID)]
+tempsamplelist<-c(sample1,sample2,sample3,sample4)
+check <- as.tibble(tempsamplelist)
+names(check) <- c("Sample_ID")
+test <- check %>% 
+  left_join(finalJoin)
+
+#also check whether isolation IDs with no Sample ID are present in finalJoin: they are, so do we want these to stay included? 
+checkSID <- finalJoin %>% 
+  filter(is.na(Sample_ID))
+
+#Sample_IDs are not unique. 
+uniqueSID <- finalJoin %>% 
+  count(Sample_ID) %>% 
+  filter(n>1)
+
+#check duplicate IDS in RNAseq ACC, all duplicate ACC values have 1 of 2 entries marked as exclude
+rnaseqacc<-masterTable$filecontents[[14]]
+rnaseqpfc<-masterTable$filecontents[[19]]
+dupACC<- rnaseqacc %>% 
+  count(`Sample RNA ID`) %>% 
+  filter(n>1)
+
+
+duplicated_rnaseqacc<-rnaseqacc[(rnaseqacc$`Sample RNA ID` %in% dupACC$`Sample RNA ID`),]
+check <- duplicated_rnaseqacc %>% 
+  filter(is.na(`Exclude?`)) %>% 
+  count(`Sample RNA ID`)
+
+
+
+#check redundant sampleIDs 
+test <- finalJoin %>% 
+  filter(is.na(`Exclude?`)) %>% 
+  group_by(Sample_ID) %>% 
+  summarize(num_SampleID = n()) %>% 
+  filter(num_SampleID != 1)
 
 
 to_table <- function(data, masterCols = c() ){
@@ -136,11 +180,11 @@ to_table <- function(data, masterCols = c() ){
     reduce(bind_rows)
 }
  
-
-for (i in 1:dim(masterTable)[1]) {
+x<-output
+for (i in 1:length(x)) {
   
   print(i)
-  print (colnames(masterTable$filecontents[[i]]))
+  print (dim(x[[i]]))
 }
 
 aggregate_excludes <- function (x){}
@@ -149,31 +193,3 @@ aggregate_excludes <- function (x){}
 
 
 
-##################test how row versioning works when files to table could change underlying data structure 
-####use case 1 rows added
-clinical <- masterTable$filecontents[[1]]
-samp_clinical <- clinical[1:100,]
-tissue <- masterTable$filecontents[[5]]
-samp_tissue <- tissue[1:100,]
-
-collapse <- samp_clinical %>% 
-  full_join(samp_tissue) %>% 
-  select(`Individual ID`,`Brain ID`,`Institution Dissection ID`)
-
-newrow <- samp_tissue[5,]
-newrow[,2]<-c("CMC_MSSM_dummy")
-samp_tissue <- rbind(samp_tissue,newrow)
-
-currentTable <- synTableQuery("SELECT * FROM syn15665630")
-ct<-as.data.frame(currentTable)
-ct<-as.tibble(ct)
-
-collapse_w_change <- samp_clinical %>% 
-  full_join(samp_tissue) %>% 
-  select(`Individual ID`,`Brain ID`,`Institution Dissection ID`)
-
-synStore(Table("syn15665630",collapse_w_change))
-
-changeTable <- synTableQuery("SELECT * FROM syn15665630")
-changet <- as.data.frame(changeTable)
-changet <- as.tibble(changet)
