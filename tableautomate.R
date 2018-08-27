@@ -63,8 +63,8 @@ masterTable <- get_files(SYN_LIST)
 masterTable$version
 masterCols <- c("Individual_ID","Brain_Bank","HBCC_Brain_ID", "NDA_GUID","SCZ_Pair","BP_Pair","Gender","Ethnicity","Age_of_Death","Dx","Funding","ASSAY","ASSAY_Target","Tissue","Cell_Type","Dissection_ID","Sample_ID","Data_ID","Exclude","Exclude_Reason", "QC_Metric","QC_Value","Biomaterials_Available")
 selectCols <-c("Individual ID","Institution","Brain ID","SCZ Pair", "BP Pair","Ethnicity","Age of Death","Dx","Institution Dissection ID", "Institution Source ID","Sample DNA ID","Brain Region", "Cell Type","Exclude?","Exclude Reason","Sample RNA ID", "Assay_Sample_ID")
-datatype = c("Clinical", "Brain", "Isolation", "Genotyping", "WGS", "MicroArray", "RNAseq","ATACseq")
-seq_1 = c("Clinical","Brain")
+datatype = c("Clinical", "brainRegion", "Isolation", "Genotyping", "WGS", "MicroArray", "RNAseq","ATACseq")
+seq_1 = c("Clinical","brainRegion")
 seq_2 = c("Isolation")
 
 
@@ -77,7 +77,7 @@ collapseRows <- function(data, datatype = c(), seq_1 = c()) {
     setNames(datatype) %>% 
     purrr::map(., ~ dplyr::bind_rows(.))
   first <- next_iteration[seq_1] %>% 
-    reduce(full_join)
+    reduce(full_join, by = "Individual_ID")
   second <- next_iteration[-which(names(next_iteration) %in% seq_1)] %>% 
     reduce(full_join)
   finalJoin <- full_join(first,second, by = "Institution_Dissection_ID", "Sample_ID")
