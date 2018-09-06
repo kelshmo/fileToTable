@@ -14,19 +14,25 @@ library(synapser)
 library(dplyr)
 library(tidyverse)
 library(synapserutils)
+library(purrr)
 
 ##check for new files 
 check_newFiles <- function(x){}
 
 ##synFromSynapse to get files
 #Sync <- syncFromSynapse("syn2946054")
-#Sync<- as.tibble(Sync)
-#files <- Sync %>% 
-#  mutate(filename = purrr::map_chr(testSync, function(x) x$get('name'))) %>% 
-#  mutate(filecontents = purrr::map(testSync, function(x) readr::read_csv(x$path,
-#                                                                       col_types = cols (.default = "c"),
-#                                                                       na=c("","NA")))) %>% 
-#  mutate(version = purrr::map(testSync, function(x) x$get('versionNumber')))
+#Specify parentsIDs not interested in using, problem is then have to go to bottom of folder structure 
+test <- tempSync[lapply(tempSync, function(x) x$get('parentId')) != c("syn4565094")]
+
+files <- tibble(
+  filename = purrr::map_chr(Sync, function(x) x$get('name'))
+) %>% 
+  mutate(filecontents = purrr::map(Sync, function(x) readr::read_csv(x$path,
+                                                                       col_types = cols (.default = "c"),
+                                                                       na=c("","NA")))) %>% 
+  mutate(version = purrr::map(Sync, function(x) x$get('versionNumber')))
+
+
 
 ##TEMP get_files
 get_files <- function(SYN_LIST){
