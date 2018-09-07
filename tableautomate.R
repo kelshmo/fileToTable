@@ -46,21 +46,41 @@ get_files <- function(SYN_LIST){
   files
 }
 
+##assertr
+#check every file individually with assertr before putting into sample master table join
+not.empty.p <- function(x) if (x=="") return(FALSE)
+indID.regex <- function(x) grepl('^CMC_\\w\\w\\w\\w_\\d\\d\\d',x)
+four.digit.ID <- function(x) nchar(x)==4
+two.digit <- function(x) nchar(x)==2
+
+testassertr <- masterTable$filecontents[[1]] %>%
+        assert(indID.regex, `Individual ID`) %>% 
+        assert(four.digit.ID, Brain_ID) %>% 
+        assert(two.digit, Age_of_Death)
+        assert(in_set(gender), Gender)
+        assert(is_uniq(Data_ID))
+        assert(not.empty.p, Individual_ID)
+        assert(in_set(brainbank), Institution)
+
+brainbank <- c("NIMH-HBCC","HBCC","MSSM","Penn","Pitt")
+gender <- c("Male","Female")
+funding <- c("BX002395","Generated at HBCC","Grant Supplement-Sklar") #not a complete list
+assay_schema <- c("ATACSeq", "HI-C", "ChIPSeq", "rnaSeq","wholeGenomeSeq", "rnaArray", "mmPCRSeq", "snpArray")
+assayTarget_schema <- c("H3K27ac","H3K27me3","H3K4me3","input","")
+celltype_schema <- c("GLUtamatergic neurons", "NeuN+", "NeuN-","GABAergic neurons","oligodendrocyte")
+exclude_schema <- c(1, "")
+
+
 ##select relevant columns
 colSubset <- function(data, selectCols = c()){
-  data$filecontents <- data$filecontents %>% 
-    purrr::map(., ~ dplyr::select(.,one_of(selectCols))) %>% 
-    purrr::map(., ~ dplyr::rename_all(.,funs(gsub(" ","_",.)))) %>% 
-    purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Sample_RNA_ID", "Sample_ID",.)))) %>% 
-    purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Sample_DNA_ID", "Sample_ID",.)))) %>% 
-    purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Assay_Sample_ID", "Sample_ID",.))))
-  data
+        data$filecontents <- data$filecontents %>% 
+                purrr::map(., ~ dplyr::select(.,one_of(selectCols))) %>% 
+                purrr::map(., ~ dplyr::rename_all(.,funs(gsub(" ","_",.)))) %>% 
+                purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Sample_RNA_ID", "Sample_ID",.)))) %>% 
+                purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Sample_DNA_ID", "Sample_ID",.)))) %>% 
+                purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Assay_Sample_ID", "Sample_ID",.))))
+        data
 }
-
-##assertr
-brainbank <- c("HBCC","MSSM","PENN","PITT")
-dx <- c("AFF", "BP", "Control","MDD","SCZ")
-funding <- c("BX002395","Generated at HBCC","Grant Supplement-Sklar") #not a complete list 
 
 
 
