@@ -6,7 +6,6 @@ sm<-as_tibble(sm)
 #write to file and save new table version at the same time
 #use primary key Sample ID or Data ID
 
-#syncFromSynapse()
 #check for version updates (possible to check against stored versions? How to store previous versions? How to account for new files added?)
 #if there is a new version, readr::read_csv
 library(tibble)
@@ -16,35 +15,53 @@ library(tidyverse)
 library(synapserutils)
 library(purrr)
 
-##check for new files 
-check_newFiles <- function(x){}
 
-##synFromSynapse to get files
-#Sync <- syncFromSynapse("syn2946054")
-#Specify parentsIDs not interested in using, problem is then have to go to bottom of folder structure 
-test <- tempSync[lapply(tempSync, function(x) x$get('parentId')) != c("syn4565094")]
+#' Get files from a folder in Synapse 
+#' 
+#' `synGetChildren` returns the metadata (properties) for each file in a folder when `includeTypes = list("file)`
+#' 
+#' This is a synapser function: https://r-docs.synapse.org/reference/synGetChildren.html
 
-files <- tibble(
-  filename = purrr::map_chr(Sync, function(x) x$get('name'))
-) %>% 
-  mutate(filecontents = purrr::map(Sync, function(x) readr::read_csv(x$path,
-                                                                       col_types = cols (.default = "c"),
-                                                                       na=c("","NA")))) %>% 
-  mutate(version = purrr::map(Sync, function(x) x$get('versionNumber')))
+folder <- synGetChildren(parent = c("syn16809995"), includeTypes = list("file"))$asList()
+
+#' Get file synIds
+synFiles <- tibble(id = unlist(lapply(folder, function(x) x$id)))
+
+selectCols <- c("Individual_ID", "Institution_Dissection_ID", "Sample_ID")
+
+merged <- getFiles(synFiles)
+
+foo <- merged$filecontents %>% 
+  purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Sample_RNA_ID", "Sample_ID",.)))) %>% 
+  purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Sample_DNA_ID", "Sample_ID",.)))) %>% 
+  purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Assay_Sample_ID", "Sample_ID",.)))) %>% 
+  purrr::map(., ~ dplyr::select(., one_of(selectCols))) %>% 
+  bind_rows
+
+#mutate(filecontents = purrr::map(filecontents, function(x) dplyr::select(vars(one_of(selectCols)))))
+
+# Example to permeate purrr to two nested layers 
+# test <- data_frame(
+#   id= rep(1:3, each=20),
+#   time = rep(1:20, 3),
+#   var1 = rnorm(60, mean=10, sd=3),
+#   var2 = rnorm(60, mean=95, sd=5)
+# )
+# 
+# 
+# t_nest <- test %>% nest(-id)
+# 
+# 
+# t11 <- t_nest %>% 
+#   mutate(data = map(data, 
+#                     ~ mutate(.x, 
+#                              var1_rollmean4 = mean(var1),
+#                              var2_delta4 = (var2 - lag(var2, 3))*0.095,
+#                              var3 = var1_rollmean4 - var2_delta4
+#                     )
+#   ))
 
 
-
-##TEMP get_files
-get_files <- function(SYN_LIST){
-  files <- SYN_LIST %>% 
-    mutate(thefile=purrr::map(id,synGet)) %>% 
-    mutate(filename=purrr::map_chr(thefile, function(x) x$get('name'))) %>% #map_chr to force character values
-    mutate(filecontents=purrr::map(thefile, function(x) readr::read_csv(x$path,
-                                                                        col_types = cols (.default = "c"),
-                                                                        na=c("","NA")))) %>% 
-    mutate(version=purrr::map(thefile, function(x) x$get('versionNumber')))
-  files
-}
 
 ##assertr
 #check every file individually with assertr before putting into sample master table join
@@ -84,9 +101,6 @@ colSubset <- function(data, selectCols = c()){
 
 
 
-SYN_LIST<- tibble(id=c("syn2279441","syn5908858","syn5666154","syn8048017","syn2929048","syn2279442","syn3153298","syn2279444","syn5666155","syn5666156","syn2279445","syn2929052","syn2279443","syn2929053","syn5650452","syn5666157","syn5666158","syn5666159","syn2279446","syn5698227","syn5698228"))
-masterTable <- get_files(SYN_LIST)
-masterTable$version
 masterCols <- c("Individual_ID","Brain_Bank","HBCC_Brain_ID", "NDA_GUID","SCZ_Pair","BP_Pair","Gender","Ethnicity","Age_of_Death","Dx","Funding","ASSAY","ASSAY_Target","Tissue","Cell_Type","Dissection_ID","Sample_ID","Data_ID","Exclude","Exclude_Reason", "QC_Metric","QC_Value","Biomaterials_Available")
 selectCols <-c("Individual ID","Institution","Brain ID","SCZ Pair", "BP Pair","Ethnicity","Age of Death","Dx","Institution Dissection ID", "Institution Source ID","Sample DNA ID","Brain Region", "Cell Type","Exclude?","Exclude Reason","Sample RNA ID", "Assay_Sample_ID")
 datatype = c("Clinical", "brainRegion", "Isolation", "Genotyping", "WGS", "MicroArray", "RNAseq","ATACseq")
