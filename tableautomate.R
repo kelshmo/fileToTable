@@ -16,6 +16,7 @@ library(synapserutils)
 library(purrr)
 
 
+
 #' Get files from a folder in Synapse 
 #' 
 #' `synGetChildren` returns the metadata (properties) for each file in a folder when `includeTypes = list("file)`
@@ -27,41 +28,23 @@ folder <- synGetChildren(parent = c("syn16809995"), includeTypes = list("file"))
 #' Get file synIds
 synFiles <- tibble(id = unlist(lapply(folder, function(x) x$id)))
 
-selectCols <- c("Individual_ID", "Institution_Dissection_ID", "Sample_ID")
+selectCols <- c("Individual_ID", "Brain_ID", "SCZ_Pair", "BP_Pair", "Gender", "Ethnicity", "Age_of_Death", "Dx", "Institution_Dissection_ID", "Sample_ID", "assayType", "organism", "Exclude", "Exclude_Reason")
 
 merged <- getFiles(synFiles)
 
-foo <- merged$filecontents %>% 
+withType <- merged %>% 
+  mutate(assay = purrr::map_chr(merged$filename, ~ stringr::str_split_fixed(., "[_\\.]", 5)[3])) %>% 
+  mutate(species = purrr::map_chr(merged$filename, ~ stringr::str_split_fixed(., "[_\\.]", 5)[2]))
+
+withType$filecontents <- purrr::map2(withType$filecontents, withType$assay, ~ dplyr::mutate(.x, assayType = .y))
+withType$filecontents <- purrr::map2(withType$filecontents, withType$species, ~ dplyr::mutate(.x, organism = .y))
+
+foo <- withType$filecontents %>% 
   purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Sample_RNA_ID", "Sample_ID",.)))) %>% 
   purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Sample_DNA_ID", "Sample_ID",.)))) %>% 
   purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Assay_Sample_ID", "Sample_ID",.)))) %>% 
   purrr::map(., ~ dplyr::select(., one_of(selectCols))) %>% 
   bind_rows
-
-#mutate(filecontents = purrr::map(filecontents, function(x) dplyr::select(vars(one_of(selectCols)))))
-
-# Example to permeate purrr to two nested layers 
-# test <- data_frame(
-#   id= rep(1:3, each=20),
-#   time = rep(1:20, 3),
-#   var1 = rnorm(60, mean=10, sd=3),
-#   var2 = rnorm(60, mean=95, sd=5)
-# )
-# 
-# 
-# t_nest <- test %>% nest(-id)
-# 
-# 
-# t11 <- t_nest %>% 
-#   mutate(data = map(data, 
-#                     ~ mutate(.x, 
-#                              var1_rollmean4 = mean(var1),
-#                              var2_delta4 = (var2 - lag(var2, 3))*0.095,
-#                              var3 = var1_rollmean4 - var2_delta4
-#                     )
-#   ))
-
-
 
 ##assertr
 #check every file individually with assertr before putting into sample master table join
