@@ -29,7 +29,7 @@ folder <- synGetChildren(parent = c("syn16809995"), includeTypes = list("file"))
 synFiles <- tibble(id = unlist(lapply(folder, function(x) x$id)))
 
 selectCols <- c("Individual_ID", "Brain_ID", "SCZ_Pair", "BP_Pair", "Gender", "Ethnicity", "Age_of_Death", "Dx", "Institution_Dissection_ID", "Sample_ID", "assayType", "organism", "Exclude", "Exclude_Reason")
-
+testCols <- paste0(selectCols, collapse = "|")
 merged <- getFiles(synFiles)
 
 withType <- merged %>% 
@@ -39,12 +39,15 @@ withType <- merged %>%
 withType$filecontents <- purrr::map2(withType$filecontents, withType$assay, ~ dplyr::mutate(.x, assayType = .y))
 withType$filecontents <- purrr::map2(withType$filecontents, withType$species, ~ dplyr::mutate(.x, organism = .y))
 
-foo <- withType$filecontents %>% 
-  purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Sample_RNA_ID", "Sample_ID",.)))) %>% 
-  purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Sample_DNA_ID", "Sample_ID",.)))) %>% 
-  purrr::map(., ~ dplyr::rename_all(.,funs(gsub("Assay_Sample_ID", "Sample_ID",.)))) %>% 
+test_SM <- withType$filecontents %>%
+  purrr::map(., ~ dplyr::rename_all(., funs(gsub("Sample_RNA_ID", "Sample_ID",.)))) %>% 
+  purrr::map(., ~ dplyr::rename_all(., funs(gsub("Sample_DNA_ID", "Sample_ID",.)))) %>% 
+  purrr::map(., ~ dplyr::rename_all(., funs(gsub("Assay_Sample_ID", "Sample_ID",.)))) %>%
+  purrr::map(., ~ dplyr::rename_all(., funs(gsub(".*Exclude\\?.*", "Exclude", .)))) %>%
+  purrr::map(., ~ dplyr::rename_all(., funs(gsub(".*Exclude_Reason.*", "Exclude_Reason", .)))) %>%
   purrr::map(., ~ dplyr::select(., one_of(selectCols))) %>% 
-  bind_rows
+  bind_rows %>% 
+  mutate(key = paste0(Sample_ID,"-",assayType))
 
 ##assertr
 #check every file individually with assertr before putting into sample master table join
