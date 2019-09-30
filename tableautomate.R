@@ -1,6 +1,6 @@
-query<-synTableQuery("SELECT * FROM syn11801978")
-sm<-as.data.frame(query)
-sm<-as_tibble(sm)
+# query<-synTableQuery("SELECT * FROM syn11801978")
+# sm<-as.data.frame(query)
+# sm<-as_tibble(sm)
 #if there are no changes don't push a new version
 #remove edit permissions from table
 #write to file and save new table version at the same time
@@ -15,7 +15,7 @@ library(tidyverse)
 library(synapserutils)
 library(purrr)
 
-
+source("process_functions.R")
 
 #' Get files from a folder in Synapse 
 #' 
@@ -28,9 +28,9 @@ folder <- synGetChildren(parent = c("syn16809995"), includeTypes = list("file"))
 #' Get file synIds
 synFiles <- tibble(id = unlist(lapply(folder, function(x) x$id)))
 
-selectCols <- c("Individual_ID", "Brain_ID", "SCZ_Pair", "BP_Pair", "Gender", "Ethnicity", "Age_of_Death", "Dx", "Institution_Dissection_ID", "Sample_ID", "assayType", "organism", "Exclude", "Exclude_Reason")
+selectCols <- c("Individual_ID", "Brain_ID", "SCZ_Pair", "BP_Pair", "Sex", "Ethnicity", "Age_of_Death", "Dx", "Institution_Dissection_ID", "Sample_ID", "assayType", "organism", "Exclude")
 testCols <- paste0(selectCols, collapse = "|")
-merged <- getFiles(synFiles)
+merged <- get_files(synFiles)
 
 withType <- merged %>% 
   mutate(assay = purrr::map_chr(merged$filename, ~ stringr::str_split_fixed(., "[_\\.]", 5)[3])) %>% 
@@ -43,11 +43,12 @@ test_SM <- withType$filecontents %>%
   purrr::map(., ~ dplyr::rename_all(., funs(gsub("Sample_RNA_ID", "Sample_ID",.)))) %>% 
   purrr::map(., ~ dplyr::rename_all(., funs(gsub("Sample_DNA_ID", "Sample_ID",.)))) %>% 
   purrr::map(., ~ dplyr::rename_all(., funs(gsub("Assay_Sample_ID", "Sample_ID",.)))) %>%
-  purrr::map(., ~ dplyr::rename_all(., funs(gsub(".*Exclude\\?.*", "Exclude", .)))) %>%
-  purrr::map(., ~ dplyr::rename_all(., funs(gsub(".*Exclude_Reason.*", "Exclude_Reason", .)))) %>%
   purrr::map(., ~ dplyr::select(., one_of(selectCols))) %>% 
   bind_rows %>% 
-  mutate(key = paste0(Sample_ID,"-",assayType))
+  select("organism", "Individual_ID","SCZ_Pair", "BP_Pair","Brain_ID", "Institution_Dissection_ID", everything())
+
+# tb <- synBuildTable("All Characterized Assays", "syn1867134", test_SM)
+# synStore(tb)
 
 ##assertr
 #check every file individually with assertr before putting into sample master table join

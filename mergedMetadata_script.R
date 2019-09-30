@@ -7,7 +7,7 @@ library(tidyverse)
 library(purrr)
 library(tibble)
 library(knitr)
-library(githubr)
+require(githubr)
 
 source("process_functions.R")
 
@@ -34,5 +34,30 @@ full <- ordered_join(clinical = clinical,
 
 full <- select_if(full, ~!all(is.na(.)))
 
-write.csv(full, "../files/CMC_Human_ChIPSeq_mergedMetadata.csv", row.names = FALSE)
+nameFile <- c("../files/CMC_Human_ChIPSeq_mergedMetadata.csv")
+
+write.csv(full, nameFile , row.names = FALSE)
+
+# get github history for Provenance 
+thisFilename <- c("mergedMetadata_script.R")
+thisRepo <- githubr::getRepo(repository = "kelshmo/fileToTable")
+thisFile <- githubr::getPermlink(repository = thisRepo, repositoryPath = thisFilename)
+
+#describe activity for Provenance
+activityName = "Join metadata"
+activityDescription = "changes to metadata - new merge"
+
+# push file to Synapse
+file <- File(path = nameFile , parent = "syn16809995", versionComment = paste0("Merged ", date()))
+
+ids <- paste0(SYN_LIST$id, collapse = "','")
+
+synStore(file,
+         activityName = activityName,
+         activityDescription = activityDescription,
+         used = c("syn2279441","syn2279442","syn17114462"),
+         executed = thisFile)
+         
+
+
 
